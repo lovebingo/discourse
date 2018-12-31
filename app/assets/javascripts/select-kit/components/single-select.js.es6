@@ -56,6 +56,11 @@ export default SelectKitComponent.extend({
     this.set("value", computedValue);
   },
 
+  forceValue(value) {
+    this.mutateValue(value);
+    this._compute();
+  },
+
   _beforeWillComputeValue(value) {
     if (
       !isEmpty(this.get("content")) &&
@@ -211,6 +216,12 @@ export default SelectKitComponent.extend({
 
   select(computedContentItem) {
     if (computedContentItem.__sk_row_type === "noopRow") {
+      applyOnSelectPluginApiCallbacks(
+        this.get("pluginApiIdentifiers"),
+        computedContentItem.value,
+        this
+      );
+
       this._boundaryActionHandler("onSelect", computedContentItem.value);
       return;
     }

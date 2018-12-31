@@ -28,6 +28,10 @@ module FileStore
       not_implemented
     end
 
+    def upload_path
+      File.join("uploads", RailsMultisite::ConnectionManagement.current_db)
+    end
+
     def has_been_uploaded?(url)
       not_implemented
     end
@@ -94,7 +98,7 @@ module FileStore
 
     def get_path_for(type, id, sha, extension)
       depth = get_depth_for(id)
-      tree = File.join(*sha[0, depth].split(""), "")
+      tree = File.join(*sha[0, depth].chars, "")
       "#{type}/#{depth + 1}X/#{tree}#{sha}#{extension}"
     end
 
@@ -103,8 +107,7 @@ module FileStore
         if upload.extension
           ".#{upload.extension}"
         else
-          # Maintain backward compatibility before Jobs::MigrateUploadExtensions
-          # runs
+          # Maintain backward compatibility before Jobs::MigrateUploadExtensions runs
           File.extname(upload.original_filename)
         end
 

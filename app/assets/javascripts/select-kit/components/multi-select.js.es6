@@ -115,6 +115,11 @@ export default SelectKitComponent.extend({
   },
   mutateContent() {},
 
+  forceValues(values) {
+    this.mutateValues(values);
+    this._compute();
+  },
+
   filterComputedContent(computedContent, computedValues, filter) {
     return computedContent.filter(c => {
       return this._normalize(get(c, "name")).indexOf(filter) > -1;
@@ -265,6 +270,12 @@ export default SelectKitComponent.extend({
     }
 
     if (computedContentItem.__sk_row_type === "noopRow") {
+      applyOnSelectPluginApiCallbacks(
+        this.get("pluginApiIdentifiers"),
+        computedContentItem.value,
+        this
+      );
+
       this._boundaryActionHandler("onSelect", computedContentItem.value);
       return;
     }

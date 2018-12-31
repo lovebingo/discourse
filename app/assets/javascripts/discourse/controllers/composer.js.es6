@@ -62,6 +62,12 @@ function loadDraft(store, opts) {
 
 const _popupMenuOptionsCallbacks = [];
 
+let _checkDraftPopup = !Ember.testing;
+
+export function toggleCheckDraftPopup(enabled) {
+  _checkDraftPopup = enabled;
+}
+
 export function clearPopupMenuOptionsCallback() {
   _popupMenuOptionsCallbacks.length = 0;
 }
@@ -194,9 +200,13 @@ export default Ember.Controller.extend({
 
   canUnlistTopic: Em.computed.and("model.creatingTopic", "isStaffUser"),
 
-  @computed("canWhisper", "model.whisper")
-  showWhisperToggle(canWhisper, isWhisper) {
-    return canWhisper && !isWhisper;
+  @computed("canWhisper", "model.post")
+  showWhisperToggle(canWhisper, repliedToPost) {
+    const replyingToWhisper =
+      repliedToPost &&
+      repliedToPost.get("post_type") === this.site.post_types.whisper;
+
+    return canWhisper && !replyingToWhisper;
   },
 
   @computed("isStaffUser", "model.action")
@@ -220,7 +230,7 @@ export default Ember.Controller.extend({
     return option;
   },
 
-  @computed("model.composeState", "model.creatingTopic")
+  @computed("model.composeState", "model.creatingTopic", "model.post")
   popupMenuOptions(composeState) {
     if (composeState === "open" || composeState === "fullscreen") {
       let options = [];
@@ -766,21 +776,35 @@ export default Ember.Controller.extend({
           .then(resolve, reject);
       }
 
-      // we need a draft sequence for the composer to work
-      if (opts.draftSequence === undefined) {
-        return Draft.get(opts.draftKey)
-          .then(function(data) {
-            opts.draftSequence = data.draft_sequence;
-            opts.draft = data.draft;
-            self._setModel(composerModel, opts);
-          })
-          .then(resolve, reject);
-      }
-
       if (composerModel) {
         if (composerModel.get("action") !== opts.action) {
           composerModel.setProperties({ unlistTopic: false, whisper: false });
         }
+      }
+
+      // check if there is another draft saved on server
+      // or get a draft sequence number
+      if (!opts.draft || opts.draftSequence === undefined) {
+        return Draft.get(opts.draftKey)
+          .then(data => {
+            if (opts.skipDraftCheck) {
+              data.draft = undefined;
+              return data;
+            }
+
+            return self.confirmDraftAbandon(data);
+          })
+          .then(data => {
+            opts.draft = opts.draft || data.draft;
+
+            // we need a draft sequence for the composer to work
+            if (opts.draft_sequence === undefined) {
+              opts.draftSequence = data.draft_sequence;
+            }
+
+            self._setModel(composerModel, opts);
+          })
+          .then(resolve, reject);
       }
 
       self._setModel(composerModel, opts);
@@ -858,6 +882,41 @@ export default Ember.Controller.extend({
       Draft.clear(key, this.get("model.draftSequence")).then(() => {
         this.appEvents.trigger("draft:destroyed", key);
       });
+    }
+  },
+
+  confirmDraftAbandon(data) {
+    if (!data.draft) {
+      return data;
+    }
+
+    // do not show abandon dialog if old draft is clean
+    const draft = JSON.parse(data.draft);
+    if (draft.reply === draft.originalText) {
+      data.draft = null;
+      return data;
+    }
+
+    if (_checkDraftPopup) {
+      return new Ember.RSVP.Promise(resolve => {
+        bootbox.dialog(I18n.t("drafts.abandon.confirm"), [
+          {
+            label: I18n.t("drafts.abandon.no_value"),
+            callback: () => resolve(data)
+          },
+          {
+            label: I18n.t("drafts.abandon.yes_value"),
+            class: "btn-danger",
+            callback: () => {
+              data.draft = null;
+              resolve(data);
+            }
+          }
+        ]);
+      });
+    } else {
+      data.draft = null;
+      return data;
     }
   },
 
